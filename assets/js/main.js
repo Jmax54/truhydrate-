@@ -37,9 +37,30 @@ const SHOPIFY = {
   /* ---------- Nav: scrolled state + mobile menu ---------- */
   const nav = document.querySelector("[data-nav]");
   const toggle = document.querySelector("[data-menu-toggle]");
-  const onScroll = () => nav.classList.toggle("is-scrolled", window.scrollY > 24);
+  let lastY = window.scrollY;
+  const onScroll = () => {
+    const y = window.scrollY;
+    nav.classList.toggle("is-scrolled", y > 24);
+    // tuck the pill away while scrolling down, bring it back on scroll up
+    if (!nav.classList.contains("is-open") && Math.abs(y - lastY) > 6) {
+      nav.classList.toggle("is-hidden", y > lastY && y > 400);
+      lastY = y;
+    }
+  };
   onScroll();
   window.addEventListener("scroll", onScroll, { passive: true });
+
+  // highlight the link of the section in view
+  const navLinks = [...nav.querySelectorAll(".nav__links a")];
+  if ("IntersectionObserver" in window) {
+    const spy = new IntersectionObserver((entries) => entries.forEach((en) => {
+      if (!en.isIntersecting) return;
+      navLinks.forEach((a) => a.classList.toggle("is-active", a.getAttribute("href") === `#${en.target.id}`));
+    }), { rootMargin: "-45% 0px -50% 0px" });
+    ["top", "origin", "wearable", "design", "shop"].forEach((id) => {
+      const el = document.getElementById(id); if (el) spy.observe(el);
+    });
+  }
 
   const setMenu = (open) => {
     nav.classList.toggle("is-open", open);
@@ -100,27 +121,43 @@ const SHOPIFY = {
     });
   });
 
-  // Wearable: pin the section, draw the strap out of the label
+  // mobile browsers resize the viewport as the URL bar shows/hides; don't recalc on that
+  ScrollTrigger.config({ ignoreMobileResize: true });
+
+  // Wearable: draw the strap out of the label
   const steps = gsap.utils.toArray("[data-step]");
   const setStep = (i) => steps.forEach((li, n) => li.classList.toggle("is-active", n === i));
-
-  const wear = gsap.timeline({
-    defaults: { ease: "none" },
-    scrollTrigger: {
-      trigger: ".wearable",
-      pin: ".wearable__pin",
-      start: "top top",
-      end: "+=180%",
-      scrub: 0.6,
-      onUpdate: (st) => setStep(Math.min(2, Math.floor(st.progress * 3))),
-    },
-  });
-  wear
-    .to("[data-progress]", { scaleX: 1, duration: 3 }, 0)
+  const strapTimeline = (tl) => tl
     .to("[data-peel]", { attr: { height: 0 }, duration: 1.6 }, 0.6)
     .to("[data-strap]", { strokeDashoffset: 0, duration: 1.6 }, 0.6)
     .to("[data-buckle]", { opacity: 1, duration: 0.3 }, 2.1)
     .to(".wearable__scene svg", { rotate: -8, duration: 0.8 }, 2.2);
+
+  const mm = gsap.matchMedia();
+  // desktop: pin the section and step through the story
+  mm.add("(min-width: 821px)", () => {
+    const tl = gsap.timeline({
+      defaults: { ease: "none" },
+      scrollTrigger: {
+        trigger: ".wearable",
+        pin: ".wearable__pin",
+        start: "top top",
+        end: "+=180%",
+        scrub: 0.6,
+        onUpdate: (st) => setStep(Math.min(2, Math.floor(st.progress * 3))),
+      },
+    });
+    tl.to("[data-progress]", { scaleX: 1, duration: 3 }, 0);
+    strapTimeline(tl);
+  });
+  // mobile: no pinning, the strap draws as the bottle scrolls through view
+  mm.add("(max-width: 820px)", () => {
+    steps.forEach((li) => li.classList.add("is-active"));
+    strapTimeline(gsap.timeline({
+      defaults: { ease: "none" },
+      scrollTrigger: { trigger: ".wearable__scene", start: "top 75%", end: "bottom 35%", scrub: 0.6 },
+    }));
+  });
 
   // Anatomy bottle floats up as it enters
   gsap.from(".anatomy__bottle svg", {
